@@ -1,0 +1,10 @@
+cases*
+finaly
+newdata
+results
+data
+venv
+res
+.env
+*json
+*.pyc

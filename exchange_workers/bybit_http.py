@@ -1,0 +1,554 @@
+from decouple import config
+import requests
+import shared_vars as sv
+from models.settings import Settings
+import time
+import hashlib
+import threading
+import hmac
+import uuid
+import json
+
+round_coins = {
+    'ALGOUSDT': 4,
+    'DOTUSDT': 3,
+    'FILUSDT': 3,
+    'GALAUSDT': 5,
+    'XRPUSDT': 4,
+    'VETUSDT': 5,
+    'MATICUSDT': 4,
+    'FTMUSDT': 4,
+    'KAVAUSDT': 4,
+    'MANAUSDT': 4,
+    'ATOMUSDT': 3,
+    'ADAUSDT': 4,
+    'FLOWUSDT': 4,
+    'AXSUSDT': 3,
+    'SOLUSDT': 3,
+    'INJUSDT': 4,
+    'EGLDUSDT': 2,
+    'GRTUSDT': 5,
+    'DOGEUSDT': 5,
+    'SNXUSDT': 3,
+    'APTUSDT': 4,
+    'NEOUSDT': 3,
+    'SUIUSDT': 5,
+    'MINAUSDT': 4,
+    'RNDRUSDT': 5,
+    'XMRUSDT': 2,
+    'TRXUSDT': 5,
+    'UNIUSDT': 3,
+    'LTCUSDT': 2,
+    'AAVEUSDT': 2,
+    'XLMUSDT': 5,
+    'AVAXUSDT': 3,
+    'STXUSDT': 5,
+    'SANDUSDT': 4,
+    'THETAUSDT': 4,
+    'APEUSDT': 3,
+    'DYDXUSDT': 3,
+
+
+}
+round_amount = {
+    'ALGOUSDT': 0,
+    'DOTUSDT': 0,
+    'FILUSDT': 0,
+    'GALAUSDT': 0,
+    'XRPUSDT': 0,
+    'VETUSDT': 0,
+    'MATICUSDT': 0,
+    'FTMUSDT': 0,
+    'KAVAUSDT': 0,
+    'MANAUSDT': 0,
+    'ATOMUSDT': 1,
+    'ADAUSDT': 0,
+    'FLOWUSDT': 0,
+    'AXSUSDT': 0,
+    'SOLUSDT': 1,
+    'INJUSDT': 1,
+    'EGLDUSDT': 1,
+    'GRTUSDT': 0,
+    'DOGEUSDT': 0,
+    'SNXUSDT': 0,
+    'APTUSDT': 1,
+    'NEOUSDT': 1,
+    'SUIUSDT': 0,
+    'MINAUSDT': 0,
+    'RNDRUSDT': 0,
+    'XMRUSDT': 2,
+    'TRXUSDT': 0,
+    'UNIUSDT': 0,
+    'LTCUSDT': 1,
+    'AAVEUSDT': 1,
+    'XLMUSDT': 0,
+    'AVAXUSDT': 0,
+    'STXUSDT': 0,
+    'SANDUSDT': 0,
+    'THETAUSDT': 0,
+    'APEUSDT': 0,
+    'DYDXUSDT': 0,
+}
+
+class BybitAPI:
+    @staticmethod
+    def HTTP_Request(endPoint, method, payload, Info):
+        global time_stamp
+        time_stamp = str(int(time.time() * 10 ** 3))
+        signature = BybitAPI.genSignature(payload)
+        headers = {
+            'X-BAPI-API-KEY': BybitAPI.api_key,
+            'X-BAPI-SIGN': signature,
+            'X-BAPI-SIGN-TYPE': '2',
+            'X-BAPI-TIMESTAMP': time_stamp,
+            'X-BAPI-RECV-WINDOW': BybitAPI.recv_window,
+            'Content-Type': 'application/json'
+        }
+        if(method == "POST"):
+            response = BybitAPI.httpClient.request(method, BybitAPI.url + endPoint, headers=headers, data=payload)
+        else:
+            response = BybitAPI.httpClient.request(method, BybitAPI.url + endPoint + "?" + payload, headers=headers)
+        # print(Info + " Elapsed Time: " + str(response.elapsed))
+        return response.text
+        
+    
+    @staticmethod
+    def genSignature(payload):
+        param_str = str(time_stamp) + BybitAPI.api_key + BybitAPI.recv_window + payload
+        hash = hmac.new(bytes(BybitAPI.secret_key, "utf-8"), param_str.encode("utf-8"), hashlib.sha256)
+        signature = hash.hexdigest()
+        return signature
+
+    @staticmethod
+    def place_order(pl_min: bool, symb: str, buy_sell: str, amount_usdt: float, k: float = 0.0001, TP_perc = None, SL_perc = None):
+        kof = k
+        current_price = BybitAPI.get_last_price(symb)
+        print(f'cur_price: {current_price}')
+        amount_coins = amount_usdt / current_price
+        if amount_usdt == 0:
+            amount_coins = 0
+        print(amount_usdt)
+        print(amount_coins)
+        endpoint = "/v5/order/create"
+        method = "POST"
+        orderLinkId = uuid.uuid4().hex
+
+        trig_price = 0
+        if pl_min:
+            trig_price = current_price * (1+kof) if buy_sell == 'Sell' else current_price * (1-kof)
+        else:
+            trig_price = current_price * (1-kof) if buy_sell == 'Sell' else current_price * (1+kof)
+
+        params = {
+            "category": "linear",
+            "symbol": symb,
+            "side": buy_sell,
+            "positionIdx": 0,
+            "orderType": "Limit",
+            "qty": str(round(amount_coins, round_amount[symb])),
+            "price": str(round(trig_price, round_coins[symb])),
+            "isLeverage": 10,
+            "timeInForce": "GTC",
+            "orderLinkId": orderLinkId
+        }
+
+        if TP_perc is not None:
+            tp = trig_price * (1 + TP_perc) if buy_sell == 'Buy' else trig_price * (1 - TP_perc)
+            params["takeProfit"] = str(round(tp, round_coins[symb]))
+        if SL_perc is not None:
+            sl = trig_price * (1 - SL_perc) if buy_sell == 'Buy' else trig_price * (1 + SL_perc)
+            params["stopLoss"] = str(round(sl, round_coins[symb]))
+        params_str = json.dumps(params)
+
+        result = BybitAPI.HTTP_Request(endpoint, method, params_str, "Create")
+        data = json.loads(result)
+        print(data)
+        return data
+    
+    @staticmethod
+    def place_order_Market(symb: str, buy_sell: str, amount_usdt: float):
+
+        current_price = BybitAPI.get_last_price(symb)
+        amount_coins = amount_usdt / current_price
+        if amount_usdt == 0:
+            amount_coins = 0
+        endpoint = "/v5/order/create"
+        method = "POST"
+        orderLinkId = uuid.uuid4().hex
+
+        params = {
+            "category": "linear",
+            "symbol": symb,
+            "side": buy_sell,
+            "positionIdx": 0,
+            "orderType": "Market",
+            "qty": str(round(amount_coins, 1)),
+            "isLeverage": 1,
+            "timeInForce": "GTC",
+            "orderLinkId": orderLinkId
+        }
+        
+        params_str = json.dumps(params)
+        print(params_str)
+        result = BybitAPI.HTTP_Request(endpoint, method, params_str, "Create")
+        data = json.loads(result)
+        print(data)
+        return data
+    
+    @staticmethod
+    def place_close_order(symb: str, buy_sell: str, amount_coins: int):
+        print(amount_coins)
+        endpoint = "/v5/order/create"
+        method = "POST"
+        orderLinkId = uuid.uuid4().hex
+
+
+        params = {
+            "category": "linear",
+            "symbol": symb,
+            "side": buy_sell,
+            "positionIdx": 0,
+            "orderType": "Market",
+            "qty": str(round(amount_coins, 1)),
+            "isLeverage": 1,
+            "timeInForce": "GTC",
+            "orderLinkId": orderLinkId
+        }
+        params_str = json.dumps(params)
+
+        result = BybitAPI.HTTP_Request(endpoint, method, params_str, "Create")
+        data = json.loads(result)
+        print(data)
+        return data
+
+    @staticmethod
+    def sl_order(symb: str, buy_sell: str, amount_coins: float, price):
+        endpoint = "/v5/order/create"
+        method = "POST"
+        orderLinkId = uuid.uuid4().hex
+
+
+        params = {
+            "category": "linear",
+            "symbol": symb,
+            "side": buy_sell,
+            "positionIdx": 0,
+            "orderType": "Limit",
+            "qty": str(round(amount_coins, 3)),
+            "price": str(round(price, 5)),
+            "isLeverage": 5,
+            "timeInForce": "GTC",
+            "orderLinkId": orderLinkId
+        }
+        params_str = json.dumps(params)
+
+        result = BybitAPI.HTTP_Request(endpoint, method, params_str, "Create")
+        data = json.loads(result)
+
+        if 'retMsg' in result and result['retMsg'] == 'OK':
+            return 'OK'
+        else:
+            return None
+    
+    @staticmethod
+    def get_position_info(symbol: str):
+        endpoint = f'/v5/position/list'
+        payload = 'category=linear&symbol=' + symbol
+        method = 'GET'
+        try:
+            result = BybitAPI.HTTP_Request(endpoint, method, payload, "get_position")
+            data = json.loads(result)
+            
+            if 'result' in data and 'list' in data['result'] and len(data['result']['list']) > 0:
+                position_info = data['result']['list'][0]
+                return position_info
+            else:
+                return None
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            return None
+        
+    @staticmethod
+    def get_balance(coin: str):
+        endpoint = '/v5/account/wallet-balance'
+        payload = 'accountType=UNIFIED&coin=' + coin
+        method = 'GET'
+        try:
+            result = BybitAPI.HTTP_Request(endpoint, method, payload, "get_position")
+            data = json.loads(result)
+            if 'result' in data and 'list' in data['result'] and len(data['result']['list']) > 0:
+                wallet_info = data['result']['list'][0]
+                return float(wallet_info['totalEquity'])
+            else:
+                return None
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            return None
+
+    # @staticmethod
+    # def modify_order(orderLinkId: str, coin: str, buy_sell: str, amount_coins: int, open_price: float, TP_perc = None, SL_perc = None):
+    #     endpoint = '/v5/order/amend'
+    #     method = 'POST'
+
+    #     params = {
+    #     "category": "linear",
+    #     "orderId":"32fce206-8396-4fa2-b0ac-4f85ea8565e1",
+    #     "symbol": coin,
+    #     "orderLinkId": orderLinkId,
+    #     "qty": str(amount_coins),
+    #     }
+    #     params_str = json.dumps(params)
+    #     BybitAPI.HTTP_Request(endpoint, method, params_str, "Change_TP_SL")
+    
+    @staticmethod
+    def tp_sl(coin: str, buy_sell: str, amount_coins: int, open_price: float, TP_perc = None, SL_perc = None):
+        endpoint = '/v5/position/trading-stop'
+        method = 'POST'
+
+        params = {
+            "category":"linear",
+            "symbol": coin,
+            "tpTriggerBy": "MarkPrice",
+            "slTriggerBy": "IndexPrice",
+            "tpslMode": "Partial",
+            "tpOrderType": "Limit",
+            "slOrderType": "Limit",
+            "tpSize": str(amount_coins),
+            "slSize": str(amount_coins),
+            "positionIdx": 0
+        }
+
+        if TP_perc is not None:
+            tp = open_price * (1 + TP_perc) if buy_sell == 'Buy' else open_price * (1 - TP_perc)
+            params["takeProfit"] = str(round(tp, 3))
+            params["tpLimitPrice"] = str(round(tp, 3))
+            if TP_perc == 0:
+                params["takeProfit"] = str(0)
+        if SL_perc is not None:
+            sl = open_price * (1 - SL_perc) if buy_sell == 'Buy' else open_price * (1 + SL_perc)
+            params["stopLoss"] = str(round(sl, 3))
+            params["slLimitPrice"] = str(round(sl, 3))
+            if SL_perc == 0:
+                params["stopLoss"] = str(0)
+        
+        params_str = json.dumps(params)
+        response = BybitAPI.HTTP_Request(endpoint, method, params_str, "Change_TP_SL")
+        date = json.loads(response)
+        print(date)
+        if 'retMsg' in date and date['retMsg'] == 'OK':
+            return 'OK'
+        else:
+            return None
+        
+    @staticmethod
+    def sl(coin: str, amount_coins: int, stop_loss_price: float, stopLoss_Limit: float):
+        endpoint = '/v5/position/trading-stop'
+        method = 'POST'
+
+        params = {
+            "category":"linear",
+            "symbol": coin,
+            "slTriggerBy": "IndexPrice",
+            "tpslMode": "Partial",
+            "slOrderType": "Limit",
+            "tpSize": str(amount_coins),
+            "slSize": str(amount_coins),
+            "positionIdx": 0
+        }
+
+
+        params["stopLoss"] = str(round(stop_loss_price, round_coins[coin]))
+        params["slLimitPrice"] = str(round(stopLoss_Limit, round_coins[coin]))
+        # tp = stop_loss_price * (1 + 0.02)
+        # params["takeProfit"] = str(round(tp, 3))
+        # params["tpLimitPrice"] = str(round(tp, 3))
+        
+        params_str = json.dumps(params)
+        response = BybitAPI.HTTP_Request(endpoint, method, params_str, "Change_TP_SL")
+        date = json.loads(response)
+        print(date)
+        if 'retMsg' in date and date['retMsg'] == 'OK':
+            return 'OK'
+        else:
+            return None
+    @staticmethod
+    def sl_Market(coin: str, amount_coins: int, stop_loss_price: float):
+        endpoint = '/v5/position/trading-stop'
+        method = 'POST'
+
+        params = {
+            "category":"linear",
+            "symbol": coin,
+            "slTriggerBy": "IndexPrice",
+            "tpslMode": "Full",
+            "slOrderType": "Market",
+            "tpSize": str(amount_coins),
+            "slSize": str(amount_coins),
+            "positionIdx": 0
+        }
+
+
+        params["stopLoss"] = str(round(stop_loss_price, round_coins[coin]))
+        
+        params_str = json.dumps(params)
+        response = BybitAPI.HTTP_Request(endpoint, method, params_str, "Change_TP_SL")
+        date = json.loads(response)
+        print(date)
+        if 'retMsg' in date and date['retMsg'] == 'OK':
+            return 'OK'
+        else:
+            return None
+        
+    @staticmethod
+    def trailing_stop(coin: str, buy_sell: str, amount_coins: int, open_price: float, TS_dist: float, TS_trig: float, TP_perc = 0, SL_perc = None):
+        endpoint = '/v5/position/trading-stop'
+        method = 'POST'
+        triger = open_price * (1 + TS_trig) if buy_sell == 'Buy' else open_price * (1 - TS_trig)
+
+        params = {
+            "category":"linear",
+            "symbol": coin,
+            "tpTriggerBy": "MarkPrice",
+            "slTriggerBy": "IndexPrice",
+            "tpslMode": "Full",
+            "tpOrderType": "Market",
+            "slOrderType": "Market",
+            "tpSize": str(amount_coins),
+            "slSize": str(amount_coins),
+            "positionIdx": 0
+        }
+        dist = open_price / 1000*1
+        params['trailingStop'] = str(dist)
+        params['activePrice'] = str(round(triger, round_coins[coin]))
+        sl = open_price * (1 - SL_perc) if buy_sell == 'Buy' else open_price * (1 + SL_perc)
+        stopLimPr = 0
+        if buy_sell == 'Buy':
+            stopLimPr =  sl * (1-0.003)
+        else:
+            stopLimPr = sl * (1+0.003)
+        params["stopLoss"] = str(round(sl, round_coins[coin]))
+        # params["slLimitPrice"] = str(round(stopLimPr, round_coins[coin]))
+        if SL_perc == 0:
+            params["stopLoss"] = str(0)
+        tp = open_price * (1 + TP_perc) if buy_sell == 'Buy' else open_price * (1 - TP_perc)
+        params["takeProfit"] = str(round(tp, round_coins[coin]))
+        # params["tpLimitPrice"] = str(round(tp, round_coins[coin]))
+        if TP_perc == 0:
+            params["takeProfit"] = str(0)
+
+        
+        params_str = json.dumps(params)
+        response = BybitAPI.HTTP_Request(endpoint, method, params_str, "Change_TP_SL")
+        date = json.loads(response)
+        print(date['retMsg'])
+        if 'retMsg' in date and date['retMsg'] == 'OK':
+            return 'OK'
+        else:
+            return None
+
+    @staticmethod
+    def get_last_price(symbol):
+        url = f"{BybitAPI.url}/v5/market/tickers?category=inverse&symbol=" + symbol
+        response = requests.get(url).json()
+        
+        if response["retCode"] == 0:
+            if len(response["result"]["list"]) > 0:
+                return float(response["result"]["list"][0]["lastPrice"])
+            else:
+                return None
+        else:
+            return None
+    
+    @staticmethod
+    def cancel_orders(symbol=None, order_id=None, orderLinkId=None):
+        cancel_type = "Cancel all"
+        endpoint="/v5/order/cancel-all"
+        method="POST"
+        if symbol is not None and order_id is not None:
+            orderLinkId = uuid.uuid4().hex
+            pr= {
+                "category":"linear",
+                "symbol": symbol,
+                "orderLinkId": orderLinkId,
+                "orderId":order_id
+                }
+            params = json.dumps(pr)
+            endpoint="/v5/order/cancel"
+            cancel_type = "Cancel"
+        else:
+            params='{"category": "linear","symbol": null,"settleCoin": "USDT"}'
+
+        result = BybitAPI.HTTP_Request(endpoint,method,params,cancel_type)
+        data = json.loads(result)
+        print(data)
+
+    @staticmethod
+    def get_open_orders(symbol: str):
+        cancel_type = "Cancel all"
+        endpoint="/v5/order/realtime"
+        method="GET"
+
+        params= f'symbol={symbol}&category=linear&openOnly=0&limit=30'
+
+        result = BybitAPI.HTTP_Request(endpoint,method,params,cancel_type)
+        data = json.loads(result)
+        return data
+    
+    @staticmethod
+    def get_kline(coin: str, number_candles: int, interv: int):
+        end = int(time.time() * 1000)  # current timestamp in milliseconds
+        start = end - (number_candles * interv * 60 * 1000)  # calculate start timestamp
+        endpoint= f'/v5/market/kline?category=inverse&symbol={coin}&interval={interv}&limit={number_candles}'
+        url = BybitAPI.url + endpoint
+        response = requests.get(url).json()
+
+        new_list = [[int(x[0]), float(x[1]), float(x[2]), float(x[3]), float(x[4]), float(x[5])] for x in response['result']['list']]
+        reversed_list = new_list[::-1]
+        return reversed_list
+    @staticmethod
+    def get_PNL():
+        endpoint = '/v5/position/closed-pnl'
+        payload = 'category=linear&limit=1'
+        method = 'GET'
+        try:
+            result = BybitAPI.HTTP_Request(endpoint, method, payload, "get_position")
+            data = json.loads(result)
+            print(data)
+            if 'result' in data and 'list' in data['result'] and len(data['result']['list']) > 0:
+                pnl_info = data['result']['list'][0]
+                return float(pnl_info['closedPnl']), float(pnl_info['avgEntryPrice']), float(pnl_info['avgExitPrice'])
+            else:
+                return None
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            return None
+
+    api_key = None
+    secret_key = None
+    httpClient = None
+    recv_window = None
+    url = None
+    init_lock = threading.Lock() 
+
+    @staticmethod
+    def init(settings: Settings):
+        # Check if the variables are already set
+        if BybitAPI.api_key is not None and BybitAPI.secret_key is not None and \
+                BybitAPI.httpClient is not None and BybitAPI.recv_window is not None and \
+                BybitAPI.url is not None:
+            return
+        
+        # Acquire the lock to ensure only one thread initializes the variables
+        with BybitAPI.init_lock:
+            # Check again after acquiring the lock in case another thread has already initialized the variables
+            if BybitAPI.api_key is not None and BybitAPI.secret_key is not None and \
+                    BybitAPI.httpClient is not None and BybitAPI.recv_window is not None and \
+                    BybitAPI.url is not None:
+                return
+            
+            # Set the variables from shared_vars module
+            BybitAPI.api_key = config(settings.API_KEY)
+            BybitAPI.secret_key = config(settings.SECRET_KEY)
+            BybitAPI.httpClient = requests.Session()
+            BybitAPI.recv_window = str(5000)
+            BybitAPI.url = "https://api.bybit.com"
