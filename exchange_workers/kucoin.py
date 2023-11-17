@@ -151,7 +151,7 @@ class KuCoin:
     @staticmethod
     def get_balance(coin: str):
         result = KuCoin.user_client.get_account_overview(currency=coin) # 'availableBalance'
-        return result
+        return result['availableBalance']
     
     
 
@@ -174,6 +174,6 @@ class KuCoin:
                 return
             
             # Set the variables from shared_vars module
-            KuCoin.user_client = User(key=config(settings.API_KEY), secret=config(settings.SECRET_KEY), passphrase='apitest', is_sandbox=False, url='https://api-futures.kucoin.com')
+            KuCoin.user_client = User(key=config(settings.API_KEY), secret=config(settings.SECRET_KEY), passphrase='passphrase', is_sandbox=False, url='https://api-futures.kucoin.com')
             KuCoin.market_client = Market(url='https://api-futures.kucoin.com')
-            KuCoin.client = Trade(key=config(settings.API_KEY), secret=config(settings.SECRET_KEY), passphrase='apitest', is_sandbox=False, url='https://api-futures.kucoin.com')
+            KuCoin.client = Trade(key=config(settings.API_KEY), secret=config(settings.SECRET_KEY), passphrase='passphrase', is_sandbox=False, url='https://api-futures.kucoin.com')
