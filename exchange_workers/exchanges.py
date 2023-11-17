@@ -8,6 +8,25 @@ import datetime
 import asyncio
 import time
 
+def trailing_SL(position: Position, price: float):
+    sd = 'Buy' if position.signal == 1 else 'Sell'
+    if sv.settings_gl.exchange == 'BB':
+        pass
+    elif sv.settings_gl.exchange == 'KC':
+        KuCoin.trailing_SL(position.coin, sd, position.amount, price)
+
+def close_time_finish(position: Position):
+    sd = 'Buy' if position.signal == 1 else 'Sell'
+    if sv.settings_gl.exchange =='BB':
+        pass
+    elif sv.settings_gl.exchange == 'KC':
+        KuCoin.close_position_market(position.coin, sd, position.amount)
+
+def get_last_price(coin: str):
+    if sv.settings_gl.exchange == 'BB':
+        return BybitAPI.get_last_price(coin)
+    elif sv.settings_gl.exchange == 'KC':
+        return KuCoin.get_last_price(coin)
 
 def get_balance():
     balance = 0
@@ -65,8 +84,8 @@ async def place_order(settings: Settings, buy_sell: int):
                     return True, current_position
                 
                 time.sleep(1)
-                time_format = "%Y-%m-%d %H:%M:%S"
-                time_obj = datetime.datetime.strptime(open_time, time_format)
+                
+                time_obj = datetime.datetime.strptime(open_time, sv.time_format)
                 duration = datetime.datetime.now() - time_obj
                 duration_seconds = duration.total_seconds()
 
@@ -100,6 +119,7 @@ async def place_order(settings: Settings, buy_sell: int):
                     current_position = Position(settings.coin, open_time , float(position['avgEntryPrice']), old_balance, float(position['currentQty']), buy_sell)
 
                     await tel.send_inform_message(settings.telegram_token, f'Position was taken successfully: {str(current_position)}', '', False)
+                    KuCoin.open_SL(settings.coin, bs, current_position.amount, current_position.price_open, settings.init_stop_loss)
                     return True, current_position
                 
                 time.sleep(1)

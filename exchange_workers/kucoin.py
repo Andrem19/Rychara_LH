@@ -128,6 +128,14 @@ class KuCoin:
         order_id = KuCoin.client.create_limit_order(symbol=f'{coin}M', side=side, size=amount_lot, lever='5', closeOrder=True, stopPriceType='IP', price=round(price, round_coins[coin]), stopPrice=round(price, round_coins[coin]), stop=st)
         return order_id
     
+    @staticmethod
+    def trailing_SL(coin: str, sd: str, amount_lot: str, price: float) -> str:
+        side = 'buy' if sd == 'Sell' else 'sell'
+        st = 'down' if side =='sell' else 'up'
+
+        order_id = KuCoin.client.create_limit_order(symbol=f'{coin}M', side=side, size=amount_lot, lever='5', closeOrder=True, stopPriceType='IP', price=round(price, round_coins[coin]), stopPrice=round(price, round_coins[coin]), stop=st)
+        return order_id
+    
 
     @staticmethod
     def open_TP(coin: str, sd: str, amount_lot: str, open_price: float, TP_perc: float) -> str:
