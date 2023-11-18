@@ -1,16 +1,19 @@
 import json
 import os
+import shared_vars as sv
 from models.position import Position
 
 def add_pos_to_db(item: Position, path):
-    with open(path, 'a') as file:
-        json.dump(item.__dict__, file)
-        file.write('\n')
+    with sv.global_var_lock:
+        with open(path, 'a') as file:
+            json.dump(item.__dict__, file)
+            file.write('\n')
 
 def add_saldo(item: list, path: str):
-    with open(path, 'a') as file:
-        item[1] = round(item[1], 3)
-        file.write(f'{item[0]},{item[1]}' + "\n")
+    with sv.global_var_lock:
+        with open(path, 'a') as file:
+            item[1] = round(item[1], 3)
+            file.write(f'{item[0]},{item[1]}' + "\n")
 
 def get_last_saldo():
     path = '_db/saldo.txt'
