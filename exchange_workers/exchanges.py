@@ -8,12 +8,18 @@ import datetime
 import asyncio
 import time
 
-def trailing_SL(position: Position, price: float):
+def cancel_order(order_id):
+    if sv.settings_gl.exchange == 'BB':
+        pass
+    elif sv.settings_gl.exchange == 'KC':
+        KuCoin.cancel_order_byId(order_id)
+
+def trailing_SL(position: Position, price: float) -> str:
     sd = 'Buy' if position.signal == 1 else 'Sell'
     if sv.settings_gl.exchange == 'BB':
         pass
     elif sv.settings_gl.exchange == 'KC':
-        KuCoin.trailing_SL(position.coin, sd, position.amount, price)
+        return KuCoin.trailing_SL(position.coin, sd, position.amount, price)
 
 def close_time_finish(position: Position):
     sd = 'Buy' if position.signal == 1 else 'Sell'
@@ -115,11 +121,11 @@ async def place_order(settings: Settings, buy_sell: int):
             while True:
                 is_pos_exist, position = is_position_exist(get_position_info(settings.coin))
                 if is_pos_exist == True:
-                    old_balance = get_balance('USDT')
+                    old_balance = get_balance()
                     current_position = Position(settings.coin, open_time , float(position['avgEntryPrice']), old_balance, float(position['currentQty']), buy_sell)
 
                     await tel.send_inform_message(settings.telegram_token, f'Position was taken successfully: {str(current_position)}', '', False)
-                    KuCoin.open_SL(settings.coin, bs, current_position.amount, current_position.price_open, settings.init_stop_loss)
+                    current_position.order_sl_id = KuCoin.open_SL(settings.coin, bs, current_position.amount, current_position.price_open, settings.init_stop_loss)
                     return True, current_position
                 
                 time.sleep(1)

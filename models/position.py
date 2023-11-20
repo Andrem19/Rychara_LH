@@ -13,6 +13,7 @@ class Position:
         self.old_balance = old_balance
         self.new_balance = None
         self.profit = None
+        self.order_sl_id = ''
 
     def to_json(self):
         with open(f"positions/position_{self.coin}.json", "a") as file:

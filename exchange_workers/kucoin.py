@@ -17,29 +17,29 @@ round_coins = {
     'KAVAUSDT': 4,
     'MANAUSDT': 4,
     'ATOMUSDT': 3,
-    'ADAUSDT': 4,
+    'ADAUSDT': 5,
     'FLOWUSDT': 4,
     'AXSUSDT': 3,
     'SOLUSDT': 3,
-    'INJUSDT': 4,
+    'INJUSDT': 3,
     'EGLDUSDT': 2,
     'GRTUSDT': 5,
     'DOGEUSDT': 5,
     'SNXUSDT': 3,
-    'APTUSDT': 4,
+    'APTUSDT': 3,
     'NEOUSDT': 3,
-    'SUIUSDT': 5,
+    'SUIUSDT': 4,
     'MINAUSDT': 4,
-    'RNDRUSDT': 5,
+    'RNDRUSDT': 4,
     'XMRUSDT': 2,
     'TRXUSDT': 5,
     'UNIUSDT': 3,
     'LTCUSDT': 2,
     'AAVEUSDT': 2,
     'XLMUSDT': 5,
-    'AVAXUSDT': 3,
-    'STXUSDT': 5,
-    'SANDUSDT': 4,
+    'AVAXUSDT': 2,
+    'STXUSDT': 4,
+    'SANDUSDT': 5,
     'THETAUSDT': 4,
     'APEUSDT': 3,
     'DYDXUSDT': 3,
@@ -88,21 +88,24 @@ amount_lot = {
 class KuCoin:
     @staticmethod
     def open_limit_order(coin: str, sd: str, amount_usdt: int) -> str:
-        curent_price = KuCoin.get_last_price(f'{coin}M')
+        curent_price = KuCoin.get_last_price(coin)
         lot = (amount_usdt / curent_price) // amount_lot[coin]
         side = 'buy' if sd == 'Buy' else 'sell'
         pr = 0
         if side == 'buy':
-            pr = curent_price * (1-0.0001)
-        else:
             pr = curent_price * (1+0.0001)
+        else:
+            pr = curent_price * (1-0.0001)
         order_id = KuCoin.client.create_limit_order(symbol=f'{coin}M', side=side, lever='5', size=int(lot), price=round(pr, round_coins[coin]))
         return order_id
     
     @staticmethod
     def cancel_order_byId(order_id: str) -> str:
-        result = KuCoin.client.cancel_order(orderId=order_id)
-        print(result)
+        try:
+            result = KuCoin.client.cancel_order(orderId=order_id)
+            print(result)
+        except Exception as e:
+            print(f'Error: {e}')
 
     @staticmethod
     def close_position_market(coin: str, sd: str, amount_lot: str) -> str:
@@ -126,7 +129,7 @@ class KuCoin:
             price = open_price * (1-SL_perc)
 
         order_id = KuCoin.client.create_limit_order(symbol=f'{coin}M', side=side, size=amount_lot, lever='5', closeOrder=True, stopPriceType='IP', price=round(price, round_coins[coin]), stopPrice=round(price, round_coins[coin]), stop=st)
-        return order_id
+        return order_id['orderId']
     
     @staticmethod
     def trailing_SL(coin: str, sd: str, amount_lot: str, price: float) -> str:
@@ -134,7 +137,7 @@ class KuCoin:
         st = 'down' if side =='sell' else 'up'
 
         order_id = KuCoin.client.create_limit_order(symbol=f'{coin}M', side=side, size=amount_lot, lever='5', closeOrder=True, stopPriceType='IP', price=round(price, round_coins[coin]), stopPrice=round(price, round_coins[coin]), stop=st)
-        return order_id
+        return order_id['orderId']
     
 
     @staticmethod
@@ -152,14 +155,14 @@ class KuCoin:
     
     @staticmethod
     def get_last_price(coin):
-        tk = KuCoin.market_client.get_ticker(coin)
+        tk = KuCoin.market_client.get_ticker(f'{coin}M')
         curent_price = float(tk['price'])
         return curent_price
          
     @staticmethod
     def get_balance(coin: str):
-        result = KuCoin.user_client.get_account_overview(currency=coin) # 'availableBalance'
-        return result['availableBalance']
+        result = KuCoin.user_client.get_account_overview(currency=coin) # 'availableBalance' 'accountEquity'
+        return result['accountEquity']
     
     
 

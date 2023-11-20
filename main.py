@@ -33,6 +33,9 @@ def main(args=None):
 
     doc_ref = fb.db.collection('signal').document(sv.settings_gl.name)
     doc_ref.on_snapshot(on_signal_change)
+    
+    while True:
+        time.sleep(1) 
 
 
 if __name__ == '__main__':

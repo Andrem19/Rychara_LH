@@ -19,9 +19,9 @@ async def open_position(settings: Settings, signal: int):
         print('start open position')
         time_start = datetime.datetime.now().timestamp()
         res, cur_pos = await ex.place_order(settings, signal)
-        last_border_sl = cur_pos.price_open
+        last_border_sl = cur_pos.price_open if res else 0
         if not res:
-            position_wasnt_open(settings)
+            return await position_wasnt_open(settings)
         while res:
             time.sleep(2)
             last_price = ex.get_last_price(settings.coin)
@@ -33,20 +33,23 @@ async def open_position(settings: Settings, signal: int):
             if duration_seconds >= settings.target_len * 1 * 60 and not close_order:
                 print('time to close')
                 ex.close_time_finish(cur_pos)
+                ex.cancel_order(cur_pos.order_sl_id)
                 close_order = True
             
-            if not close_order:
+            if not close_order and res:
                 if last_price > last_border_sl * (1+settings.distance*2) and signal == 1:
                     stop_loss = (1 + settings.distance) * last_border_sl
                     if last_price > last_border_sl * (1+settings.distance*4):
                         stop_loss = (1 + settings.distance*2) * last_border_sl
-                    ex.trailing_SL(cur_pos, stop_loss)
+                    ex.cancel_order(cur_pos.order_sl_id)
+                    cur_pos.order_sl_id = ex.trailing_SL(cur_pos, stop_loss)
                     last_border_sl = stop_loss
                 elif last_price < last_border_sl * (1-settings.distance*2) and signal == 2:
                     stop_loss = (1 - settings.distance) * last_border_sl
                     if last_price < last_border_sl * (1-settings.distance*4):
                         stop_loss = (1 - settings.distance*2) * last_border_sl
-                    ex.trailing_SL(cur_pos, stop_loss)
+                    ex.cancel_order(cur_pos.order_sl_id)
+                    cur_pos.order_sl_id = ex.trailing_SL(cur_pos, stop_loss)
                     last_border_sl = stop_loss
             
             if time_start + settings.message_timer < datetime.datetime.now().timestamp():
@@ -74,12 +77,13 @@ async def position_wasnt_open(settings: Settings):
         fb.write_data('status', 'entitys', sv.settings_gl.name, ent)
 
 async def handle_position(cur_pos: Position, settings: Settings):
+    ex.cancel_order(cur_pos.order_sl_id)
     last_saldo = db.get_last_saldo()
-    new_balance = ex.get_balance('USDT')
+    new_balance = ex.get_balance()
     cur_pos.new_balance = round(new_balance, 4)
     cur_pos.time_close = datetime.datetime.now().strftime(sv.time_format)
     time.sleep(2)
-    profit = cur_pos.old_balance - new_balance
+    profit = new_balance - cur_pos.old_balance
     cur_pos.profit = round(profit, 4)#
     cur_pos.duration = ser.convert_seconds_to_period(float(cur_pos.duration))
     new_saldo = last_saldo + profit

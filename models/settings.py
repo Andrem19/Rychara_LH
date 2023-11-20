@@ -13,7 +13,7 @@ class Settings:
         self.amount_usdt: float = 20
         self.init_stop_loss: float = 0.008
         self.distance: float = 0.001
-        self.border_saldo: str = '03.09.23'
+        self.border_saldo: str = '03.11.23'
 
     def to_json(self):
             with open(f"settings/settings_UNIVERSAL.json", "w") as file:
